@@ -7,6 +7,8 @@ import Modal from '../../components/ui/Modal'
 import ConfirmAction from '../../components/ui/ConfirmAction'
 import Button from '../../components/ui/Button'
 import DealForm from './DealForm'
+import { useAuth } from '../../auth/AuthContext'
+import { ROLES } from '../../auth/roles'
 
 const STAGES = ['new', 'contacted', 'proposal', 'negotiation', 'won', 'lost']
 
@@ -33,6 +35,8 @@ function formatCurrency(n) {
 }
 
 export default function DealsSection({ companyId, companyName }) {
+  const { user } = useAuth()
+  const canSeeCreators = [ROLES.MANAGER, ROLES.ADMIN].includes(user?.role)
   const [deals, setDeals] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)

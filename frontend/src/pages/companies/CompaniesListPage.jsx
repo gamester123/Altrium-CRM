@@ -15,6 +15,7 @@ const LIMIT = 20
 export default function CompaniesListPage() {
   const { user } = useAuth()
   const isAdmin = user?.role === ROLES.ADMIN
+  const canSeeCreators = [ROLES.MANAGER, ROLES.ADMIN].includes(user?.role)
 
   const [companies, setCompanies] = useState([])
   const [total, setTotal] = useState(0)
@@ -96,6 +97,9 @@ export default function CompaniesListPage() {
             <span className="company-avatar">{initials}</span>
             <span className="min-w-0">
               <strong>{c.name}</strong>
+              {!canSeeCreators && String(c.createdBy || '') === String(user?.id || '') && (
+                <span className="record-owner-label">Created by you</span>
+              )}
             </span>
           </Link>
         )
@@ -106,6 +110,12 @@ export default function CompaniesListPage() {
       header: 'Industry',
       render: (c) => <span className="company-industry">{c.industry || 'Not specified'}</span>,
     },
+    ...(canSeeCreators ? [{
+      key: 'createdBy',
+      header: 'Created by',
+      className: 'text-slate-500',
+      render: (c) => <span className="record-owner-name">{c.createdByNameSnapshot || 'Unknown'}</span>,
+    }] : []),
     {
       key: 'actions',
       header: '',

@@ -12,8 +12,12 @@ import Modal from '../../components/ui/Modal'
 import ConfirmAction from '../../components/ui/ConfirmAction'
 import Button from '../../components/ui/Button'
 import ContactForm from './ContactForm'
+import { useAuth } from '../../auth/AuthContext'
+import { ROLES } from '../../auth/roles'
 
 export default function ContactsSection({ companyId }) {
+  const { user } = useAuth()
+  const canSeeCreators = [ROLES.MANAGER, ROLES.ADMIN].includes(user?.role)
   const [contacts, setContacts] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -99,6 +103,12 @@ export default function ContactsSection({ companyId }) {
       className: 'text-ink/60',
       render: (c) => c.phone || '—',
     },
+    ...(canSeeCreators ? [{
+      key: 'owner',
+      header: 'Created by',
+      className: 'text-ink/60',
+      render: (c) => <span className="record-owner-name">{c.ownerNameSnapshot || 'Unknown'}</span>,
+    }] : []),
     {
       key: 'actions',
       header: '',
