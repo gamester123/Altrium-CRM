@@ -83,7 +83,7 @@ export default function AppShell() {
       <div className="lg:pl-[252px]">
         <header className="sticky top-0 z-30 flex h-[70px] items-center justify-between border-b border-slate-200/80 bg-white/90 px-4 backdrop-blur-xl sm:px-5 lg:px-8">
           <div className="flex items-center gap-3">
-            <button type="button" aria-label="Open navigation" aria-expanded={mobileOpen} onClick={() => setMobileOpen(true)} className="crm-hamburger lg:hidden">
+            <button type="button" aria-label="Open navigation" aria-expanded={mobileOpen} onClick={() => setMobileOpen(true)} className="crm-hamburger">
               <span></span><span></span><span></span>
             </button>
             <div className="hidden sm:grid lg:hidden h-9 w-9 place-items-center rounded-xl bg-slate-900 text-sm font-bold text-white">A</div>
