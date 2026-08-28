@@ -1,0 +1,7 @@
+{
+  "data": [
+    { "id": "l1", "name": "Kavindu Rathnayake", "email": "kavindu@prospect.test", "phone": "0761112233", "source": "Referral", "status": "new", "temperature": "hot", "ownerId": "u1", "ownerNameSnapshot": "Ravi Perera" },
+    { "id": "l2", "name": "Shanika de Silva", "email": "shanika@prospect.test", "phone": "0762223344", "source": "Website", "status": "contacted", "temperature": "warm", "ownerId": "u1", "ownerNameSnapshot": "Ravi Perera" },
+    { "id": "l3", "name": "Tharindu Bandara", "email": "tharindu@prospect.test", "phone": "0763334455", "source": "Cold call", "status": "qualified", "temperature": "cold", "ownerId": "u2", "ownerNameSnapshot": "Nadia Fernando" }
+  ]
+}

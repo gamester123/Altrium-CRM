@@ -1,0 +1,7 @@
+{
+  "data": [
+    { "id": "a1", "type": "call", "notes": "Discussed contract renewal terms, wants a follow-up next week.", "dealId": "d1", "contactId": "ct1", "loggedAt": "2026-07-24T09:15:00.000Z" },
+    { "id": "a2", "type": "email", "notes": "Sent revised pricing sheet.", "dealId": "d1", "contactId": "ct1", "loggedAt": "2026-07-22T14:00:00.000Z" },
+    { "id": "a3", "type": "meeting", "notes": "Initial requirements meeting, scoped out warehouse system needs.", "dealId": null, "contactId": "ct1", "loggedAt": "2026-07-18T11:30:00.000Z" }
+  ]
+}

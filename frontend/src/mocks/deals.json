@@ -1,0 +1,10 @@
+{
+  "data": [
+    { "id": "d1", "title": "Annual supply contract",   "value": 450000, "stage": "proposal",    "companyId": "c1", "companyNameSnapshot": "Acme Retail Ltd",        "contactId": "ct1", "contactNameSnapshot": "Priya Jayasuriya", "ownerId": "u1", "ownerNameSnapshot": "Ravi Perera" },
+    { "id": "d2", "title": "Warehouse system upgrade",  "value": 120000, "stage": "new",         "companyId": "c2", "companyNameSnapshot": "Bluewave Logistics",     "contactId": "ct3", "contactNameSnapshot": "Nimal Silva",      "ownerId": "u1", "ownerNameSnapshot": "Ravi Perera" },
+    { "id": "d3", "title": "POS rollout, 12 branches",  "value": 260000, "stage": "contacted",   "companyId": "c1", "companyNameSnapshot": "Acme Retail Ltd",        "contactId": "ct2", "contactNameSnapshot": "Dinesh Wickrama",  "ownerId": "u2", "ownerNameSnapshot": "Nadia Fernando" },
+    { "id": "d4", "title": "Fleet tracking pilot",      "value": 80000,  "stage": "negotiation", "companyId": "c2", "companyNameSnapshot": "Bluewave Logistics",     "contactId": "ct3", "contactNameSnapshot": "Nimal Silva",      "ownerId": "u2", "ownerNameSnapshot": "Nadia Fernando" },
+    { "id": "d5", "title": "Legacy system migration",   "value": 610000, "stage": "won",         "companyId": "c1", "companyNameSnapshot": "Acme Retail Ltd",        "contactId": "ct1", "contactNameSnapshot": "Priya Jayasuriya", "ownerId": "u1", "ownerNameSnapshot": "Ravi Perera" },
+    { "id": "d6", "title": "Trial support package",     "value": 15000,  "stage": "lost",        "companyId": "c2", "companyNameSnapshot": "Bluewave Logistics",     "contactId": "ct3", "contactNameSnapshot": "Nimal Silva",      "ownerId": "u2", "ownerNameSnapshot": "Nadia Fernando" }
+  ]
+}
