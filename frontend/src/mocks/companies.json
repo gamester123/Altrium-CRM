@@ -1,8 +1,0 @@
-{
-  "data": [
-    { "id": "c1", "name": "Acme Retail Ltd", "industry": "Retail" },
-    { "id": "c2", "name": "Bluewave Logistics", "industry": "Logistics" },
-    { "id": "c3", "name": "Ceylon Tech Solutions", "industry": "Technology" }
-  ],
-  "total": 3
-}

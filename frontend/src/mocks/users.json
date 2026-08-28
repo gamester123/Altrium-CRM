@@ -1,8 +1,0 @@
-{
-  "data": [
-    { "id": "u1", "name": "Ravi Perera",  "email": "ravi@crm.test",  "role": "rep" },
-    { "id": "u2", "name": "Nadia Fernando","email": "nadia@crm.test","role": "manager" },
-    { "id": "u3", "name": "Admin User",   "email": "admin@crm.test", "role": "admin" }
-  ],
-  "total": 3
-}

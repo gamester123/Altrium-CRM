@@ -1,7 +1,0 @@
-{
-  "data": [
-    { "id": "ct1", "name": "Priya Jayasuriya", "email": "priya@acme.test", "phone": "0771234567", "companyId": "c1" },
-    { "id": "ct2", "name": "Dinesh Wickrama",  "email": "dinesh@acme.test", "phone": "0777654321", "companyId": "c1" },
-    { "id": "ct3", "name": "Nimal Silva",      "email": "nimal@bluewave.test", "phone": "0712223344", "companyId": "c2" }
-  ]
-}
