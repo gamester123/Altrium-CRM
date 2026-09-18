@@ -54,7 +54,10 @@ export default function PipelineBoardPage() {
   const reps = useMemo(() => uniqueReps(deals), [deals])
   const visibleDeals = useMemo(() => (repFilter ? deals.filter((d) => String(d.ownerId) === String(repFilter)) : deals), [deals, repFilter])
   const dealsByStage = useMemo(() => groupByStage(visibleDeals), [visibleDeals])
-  const totalValue = useMemo(() => visibleDeals.reduce((sum, d) => sum + Number(d.value || 0), 0), [visibleDeals])
+  const activeDeals = useMemo(() => visibleDeals.filter((d) => !['won', 'lost'].includes(d.stage)), [visibleDeals])
+  const pipelineValue = useMemo(() => activeDeals.reduce((sum, d) => sum + Number(d.value || 0), 0), [activeDeals])
+  const wonAmount = useMemo(() => visibleDeals.filter((d) => d.stage === 'won').reduce((sum, d) => sum + Number(d.value || 0), 0), [visibleDeals])
+  const lostAmount = useMemo(() => visibleDeals.filter((d) => d.stage === 'lost').reduce((sum, d) => sum + Number(d.value || 0), 0), [visibleDeals])
 
   const findDeal = (id) => {
     for (const stage of STAGES) {
@@ -122,9 +125,9 @@ export default function PipelineBoardPage() {
 
       <div className="pipeline-overview">
         <div><span>Total deals</span><strong>{visibleDeals.length}</strong></div>
-        <div><span>Pipeline value</span><strong className="tabular">{new Intl.NumberFormat('en-LK',{style:'currency',currency:'LKR',maximumFractionDigits:0}).format(totalValue)}</strong></div>
-        <div><span>Won</span><strong>{dealsByStage.won.length}</strong></div>
-        <div><span>Active</span><strong>{visibleDeals.filter((d) => !['won','lost'].includes(d.stage)).length}</strong></div>
+        <div><span>Pipeline value</span><strong className="tabular">{new Intl.NumberFormat('en-LK',{style:'currency',currency:'LKR',maximumFractionDigits:0}).format(pipelineValue)}</strong></div>
+        <div><span>Won amount</span><strong className="tabular">{new Intl.NumberFormat('en-LK',{style:'currency',currency:'LKR',maximumFractionDigits:0}).format(wonAmount)}</strong></div>
+        <div><span>Lost amount</span><strong className="tabular">{new Intl.NumberFormat('en-LK',{style:'currency',currency:'LKR',maximumFractionDigits:0}).format(lostAmount)}</strong></div>
       </div>
 
       <div className="pipeline-stage-strip">{STAGES.map((stage) => <div key={stage}><span>{LABELS[stage]}</span><strong>{dealsByStage[stage].length}</strong></div>)}</div>

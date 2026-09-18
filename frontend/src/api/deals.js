@@ -17,9 +17,9 @@ export const listDealsForCompany = (companyId, { stage = '' } = {}) => {
   return Promise.resolve({ data: filtered, total: filtered.length })
 }
 
-export const listDeals = ({ ownerId = '' } = {}) => {
+export const listDeals = ({ ownerId = '', limit = 0, all = false } = {}) => {
   if (!USE_MOCKS) {
-    return client.get('/deals', { params: { ownerId } }).then((r) => r.data)
+    return client.get('/deals', { params: { ownerId, limit, ...(all ? { all: true } : {}) } }).then((r) => r.data)
   }
   const filtered = ownerId ? mockData.data.filter((d) => d.ownerId === ownerId) : mockData.data
   return Promise.resolve({ data: filtered, total: filtered.length })

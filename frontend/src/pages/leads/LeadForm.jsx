@@ -18,7 +18,8 @@ export default function LeadForm({ onSave, onCancel }) {
   const validate = () => {
     const next = {}
     if (!name.trim()) next.name = 'Name is required.'
-    if (email.trim() && !EMAIL_RE.test(email.trim())) next.email = 'That doesn\u2019t look like a valid email.'
+    if (!email.trim()) next.email = 'Email is required.'
+    else if (!EMAIL_RE.test(email.trim())) next.email = 'That doesn\u2019t look like a valid email.'
     setErrors(next)
     return Object.keys(next).length === 0
   }
@@ -56,7 +57,7 @@ export default function LeadForm({ onSave, onCancel }) {
         autoFocus
       />
       <Input
-        label="Email (optional)"
+        label="Email"
         name="email"
         type="email"
         value={email}
