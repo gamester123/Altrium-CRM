@@ -17,6 +17,8 @@ import PipelineBoardPage from './pages/pipeline/PipelineBoardPage'
 import DealDetailPage from './pages/deals/DealDetailPage'
 import ContactDetailPage from './pages/contacts/ContactDetailPage'
 import LeadsListPage from './pages/leads/LeadsListPage'
+import CampaignDashboardPage from './pages/CampaignDashboardPage'
+import LeadershipDashboardPage from './pages/LeadershipDashboardPage'
 
 // bridges the non-React axios interceptors to the router
 function ApiErrorBridge() {
@@ -63,6 +65,8 @@ export default function App() {
               <Route path="/deals/:id" element={<DealDetailPage />} />
               <Route path="/contacts/:id" element={<ContactDetailPage />} />    
               <Route path="/leads" element={<LeadsListPage />} />
+              <Route path="/campaigns" element={<CampaignDashboardPage />} />
+              <Route path="/leadership" element={<LeadershipDashboardPage />} />
               
               <Route element={<ProtectedRoute allow={[ROLES.ADMIN]} />}>
                 <Route path="/admin/users" element={<UserManagementPage />} />

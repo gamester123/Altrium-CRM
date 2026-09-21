@@ -4,7 +4,7 @@ import Button from '../../components/ui/Button'
 import { friendlyError } from '../../lib/errors'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-const SOURCES = ['Referral', 'Website', 'Cold call', 'Event', 'LinkedIn', 'Other']
+const SOURCES = ['Google Ads', 'LinkedIn', 'Email Campaign', 'Referral', 'Other']
 
 export default function LeadForm({ onSave, onCancel }) {
   const [name, setName] = useState('')
