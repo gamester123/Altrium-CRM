@@ -16,6 +16,9 @@ mongoose.connect(MONGO_URI)
   .then(() => console.log('✅ MongoDB connected'))
   .catch(err => console.error('❌ MongoDB error:', err));
 
+
+  const LEAD_SOURCES = ['Google Ads', 'LinkedIn', 'Email Campaign', 'Referral', 'Other'];
+
 // ========== SCHEMAS ==========
 
 const userSchema = new mongoose.Schema({
@@ -72,11 +75,12 @@ const leadSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: String,
   phone: String,
-  source: String,
+  source: { type: String, enum: LEAD_SOURCES, required: true },
   status: { type: String, enum: ['new', 'contacted', 'qualified', 'converted', 'lost'], default: 'new' },
   temperature: { type: String, enum: ['hot', 'warm', 'cold'], default: 'cold' },
   lastActivityAt: { type: Date, default: Date.now },
   ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  ownerNameSnapshot: String,
   convertedToContactId: { type: mongoose.Schema.Types.ObjectId, ref: 'Contact', default: null },
   convertedToDealId: { type: mongoose.Schema.Types.ObjectId, ref: 'Deal', default: null },
   createdAt: { type: Date, default: Date.now },
@@ -104,12 +108,15 @@ const dealSchema = new mongoose.Schema({
   ownerNameSnapshot: String,
   lastActivityAt: { type: Date, default: Date.now },
   expectedCloseDate: Date,
-  stageHistory: { type: Array, default: [] },
+    stageHistory: { type: Array, default: [] },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
-  deletedAt: { type: Date, default: null }
+  deletedAt: { type: Date, default: null },
+  archivedAt: { type: Date, default: null },
+  pendingDeletionAt: { type: Date, default: null }
 });
 dealSchema.index({ stage: 1, ownerId: 1, deletedAt: 1 });
+dealSchema.index({ archivedAt: 1 });
 
 const Deal = mongoose.model('Deal', dealSchema);
 
@@ -131,20 +138,7 @@ const Activity = mongoose.model('Activity', activitySchema);
 
 
 
-const reminderSchema = new mongoose.Schema({
-  title: { type: String, required: true },
-  dueDate: { type: Date, required: true },
-  isDone: { type: Boolean, default: false },
-  completedAt: { type: Date, default: null },
-  dealId: { type: mongoose.Schema.Types.ObjectId, ref: 'Deal', default: null },
-  contactId: { type: mongoose.Schema.Types.ObjectId, ref: 'Contact', default: null },
-  ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  createdAt: { type: Date, default: Date.now }
-});
-reminderSchema.index({ ownerId: 1, isDone: 1, dueDate: 1 });
-reminderSchema.index({ dealId: 1 });
 
-const Reminder = mongoose.model('Reminder', reminderSchema);
 
 // ========== MIDDLEWARE ==========
 
@@ -203,8 +197,8 @@ app.post('/api/auth/login', async (req, res) => {
     }
     if (!user.isActive) return res.status(401).json({ error: 'Account is deactivated' });
 
-    const privilegedRoles = ['manager', 'leadership', 'admin'];
-    if (privilegedRoles.includes(user.role)) {
+    const blockedFromRegularLogin = ['leadership', 'admin'];
+    if (blockedFromRegularLogin.includes(user.role)) {
       return res.status(403).json({ error: 'Management accounts must sign in through the management login' });
     }
 
@@ -215,7 +209,7 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// POST /api/auth/admin-login - privileged login for manager/leadership/admin only
+// POST /api/auth/admin-login - privileged login for leadership/admin only
 app.post('/api/auth/admin-login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -228,7 +222,7 @@ app.post('/api/auth/admin-login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
-    const privilegedRoles = ['manager', 'leadership', 'admin'];
+    const privilegedRoles = ['leadership', 'admin'];
     if (!privilegedRoles.includes(user.role)) {
       return res.status(403).json({ error: 'Not authorized for management access' });
     }
@@ -287,6 +281,16 @@ app.get('/api/users', authMiddleware, requireRole(['admin']), async (req, res) =
       data: users.map(u => ({ id: u._id, name: u.name, email: u.email, role: u.role, isActive: u.isActive })),
       total
     });
+  } catch (err) {
+    return sendError(res, err);
+  }
+});
+
+// GET /api/users/reps - manager/leadership/admin can fetch the rep list for reassignment pickers
+app.get('/api/users/reps', authMiddleware, requireRole(['manager', 'leadership', 'admin']), async (req, res) => {
+  try {
+    const reps = await User.find({ role: 'rep', deletedAt: null, isActive: true });
+    res.json({ data: reps.map(u => ({ id: u._id, name: u.name })) });
   } catch (err) {
     return sendError(res, err);
   }
@@ -520,14 +524,7 @@ app.delete('/api/companies/:id/permanent', authMiddleware, requireRole(['admin']
       ]
     });
 
-    // Same for reminders
-    await Reminder.deleteMany({
-      $or: [
-        { dealId: { $in: dealIds } },
-        { contactId: { $in: contactIds } }
-      ]
-    });
-
+  
     await Contact.deleteMany({ companyId: company._id });
     await Deal.deleteMany({ companyId: company._id });
 
@@ -690,9 +687,15 @@ app.get('/api/companies/:id/contacts', authMiddleware, async (req, res) => {
 // GET /api/leads - list, filterable by status, with pagination
 app.get('/api/leads', authMiddleware, async (req, res) => {
   try {
-    const { status, ownerId, page = 1, limit = 20 } = req.query;
+    const { status, search = '', ownerId, page = 1, limit = 20 } = req.query;
     const query = { deletedAt: null };
     if (status) query.status = status;
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } }
+      ];
+    }
     if (canViewAllDeals(req.user.role)) {
       if (ownerId) query.ownerId = ownerId;
     } else {
@@ -703,9 +706,11 @@ app.get('/api/leads', authMiddleware, async (req, res) => {
       .skip((Number(page) - 1) * Number(limit))
       .limit(Number(limit));
 
-        res.json({
+          res.json({
       data: leads.map(l => ({
-        id: l._id, name: l.name, status: l.status, source: l.source, temperature: l.temperature,
+        id: l._id, name: l.name, email: l.email, phone: l.phone,
+        status: l.status, source: l.source, temperature: l.temperature,
+        ownerId: l.ownerId, ownerNameSnapshot: l.ownerNameSnapshot,
         convertedToContactId: l.convertedToContactId, convertedToDealId: l.convertedToDealId
       })),
       total
@@ -719,9 +724,19 @@ app.get('/api/leads', authMiddleware, async (req, res) => {
 app.post('/api/leads', authMiddleware, async (req, res) => {
   try {
     const { name, email, phone, source } = req.body;
-   const lead = new Lead({ name, email, phone, source, ownerId: req.user.id, temperature: 'hot' });
+    const owner = await User.findById(req.user.id);
+    const lead = new Lead({
+      name, email, phone, source,
+      ownerId: req.user.id,
+      ownerNameSnapshot: owner ? owner.name : '',
+      temperature: 'hot'
+    });
     await lead.save();
-    res.json({ id: lead._id, name: lead.name, status: lead.status, source: lead.source });
+    res.json({
+      id: lead._id, name: lead.name, email: lead.email, phone: lead.phone,
+      status: lead.status, source: lead.source,
+      ownerId: lead.ownerId, ownerNameSnapshot: lead.ownerNameSnapshot
+    });
   } catch (err) {
     return sendError(res, err);
   }
@@ -730,14 +745,21 @@ app.post('/api/leads', authMiddleware, async (req, res) => {
 // PUT /api/leads/:id - update status
 app.put('/api/leads/:id', authMiddleware, async (req, res) => {
   try {
+    const lead = await Lead.findOne({ _id: req.params.id, deletedAt: null });
+    if (!lead) return res.status(404).json({ error: 'Lead not found' });
+
+    if (!canViewAllDeals(req.user.role) && String(lead.ownerId) !== req.user.id) {
+      return res.status(403).json({ error: 'Not authorized for this action' });
+    }
+
     const { status } = req.body;
     const now = new Date();
-    const lead = await Lead.findOneAndUpdate(
-      { _id: req.params.id, deletedAt: null },
-      { status, updatedAt: now, lastActivityAt: now, temperature: calculateTemperature(now) },
-      { new: true }
-    );
-    if (!lead) return res.status(404).json({ error: 'Lead not found' });
+    lead.status = status;
+    lead.updatedAt = now;
+    lead.lastActivityAt = now;
+    lead.temperature = calculateTemperature(now);
+    await lead.save();
+
     res.json({ id: lead._id, status: lead.status, temperature: lead.temperature });
   } catch (err) {
     return sendError(res, err);
@@ -751,6 +773,14 @@ app.post('/api/leads/:id/convert', authMiddleware, async (req, res) => {
 
     const lead = await Lead.findOne({ _id: req.params.id, deletedAt: null });
     if (!lead) return res.status(404).json({ error: 'Lead not found' });
+
+    if (!canViewAllDeals(req.user.role) && String(lead.ownerId) !== req.user.id) {
+      return res.status(403).json({ error: 'Not authorized for this action' });
+    }
+
+    if (lead.status === 'converted') {
+      return res.status(400).json({ error: 'This lead has already been converted', dealId: lead.convertedToDealId, contactId: lead.convertedToContactId });
+    }
 
     const company = await Company.findOne({ _id: companyId, deletedAt: null });
     if (!company) return res.status(400).json({ error: 'Company not found' });
@@ -766,6 +796,7 @@ app.post('/api/leads/:id/convert', authMiddleware, async (req, res) => {
       ownerNameSnapshot: owner ? owner.name : ''
     });
     await contact.save();
+       const now = new Date();
     const deal = new Deal({
       title: `${company.name} - ${lead.name}`,
       companyId: company._id,
@@ -774,7 +805,10 @@ app.post('/api/leads/:id/convert', authMiddleware, async (req, res) => {
       contactNameSnapshot: contact.name,
       ownerId: lead.ownerId,
       ownerNameSnapshot: owner ? owner.name : '',
-      stage: 'new'
+      stage: 'new',
+      temperature: 'hot',
+      lastActivityAt: now,
+      stageHistory: [{ stage: 'new', changedAt: now, changedBy: lead.ownerId }]
     });
     await deal.save();
 
@@ -801,6 +835,10 @@ app.delete('/api/leads/:id/permanent', authMiddleware, requireRole(['admin']), a
   }
 });
 
+// GET /api/leads/sources - the fixed list of valid lead sources, for populating the dropdown
+app.get('/api/leads/sources', authMiddleware, (req, res) => {
+  res.json({ data: LEAD_SOURCES });
+});
 // ========== DEAL PIPELINE (Story 6) ==========
 
 // Helper: does this role see everything, or just their own?
@@ -823,8 +861,14 @@ async function logSystemActivity(dealId, type, message, actingUserId) {
 // GET /api/deals - list, scoped by role (AC1 + AC2)
 app.get('/api/deals', authMiddleware, async (req, res) => {
   try {
-    const { companyId, stage, ownerId, page = 1, limit = 20 } = req.query;
+    const { companyId, stage, ownerId, all, stuckOnly, showArchived, page = 1, limit = 20 } = req.query;
     const query = { deletedAt: null };
+
+        if (showArchived === 'true') {
+      query.archivedAt = { $ne: null };
+    } else {
+      query.archivedAt = null;
+    }
 
     if (companyId) query.companyId = companyId;
 
@@ -836,21 +880,31 @@ app.get('/api/deals', authMiddleware, async (req, res) => {
 
     if (stage) query.stage = stage;
 
-    const total = await Deal.countDocuments(query);
-    const deals = await Deal.find(query)
-      .skip((Number(page) - 1) * Number(limit))
-      .limit(Number(limit));
+    let deals = await Deal.find(query);
 
-    res.json({
-      data: deals.map(d => ({
+    deals = deals.map(d => {
+      const daysSinceStageChange = getDaysSinceStageChange(d);
+           return {
         id: d._id, title: d.title, value: d.value, stage: d.stage,
         temperature: d.temperature,
         companyId: d.companyId, companyNameSnapshot: d.companyNameSnapshot,
         contactId: d.contactId, contactNameSnapshot: d.contactNameSnapshot,
-        ownerId: d.ownerId, ownerNameSnapshot: d.ownerNameSnapshot
-      })),
-      total
+        ownerId: d.ownerId, ownerNameSnapshot: d.ownerNameSnapshot,
+        isStuck: daysSinceStageChange >= 14,
+        stuckDays: daysSinceStageChange,
+        archivedAt: d.archivedAt,
+        pendingDeletionAt: d.pendingDeletionAt
+      };
     });
+
+    if (stuckOnly === 'true') {
+      deals = deals.filter(d => d.isStuck);
+    }
+
+    const total = deals.length;
+    const pagedDeals = all === 'true' ? deals : deals.slice((Number(page) - 1) * Number(limit), Number(page) * Number(limit));
+
+    res.json({ data: pagedDeals, total });
   } catch (err) {
     return sendError(res, err);
   }
@@ -865,12 +919,17 @@ app.get('/api/deals/:id', authMiddleware, async (req, res) => {
       return res.status(403).json({ error: 'Not authorized for this action' });
     }
 
+        const daysSinceStageChange = getDaysSinceStageChange(deal);
     res.json({
       id: deal._id, title: deal.title, value: deal.value, stage: deal.stage,
       temperature: deal.temperature,
       companyId: deal.companyId, companyNameSnapshot: deal.companyNameSnapshot,
       contactId: deal.contactId, contactNameSnapshot: deal.contactNameSnapshot,
       ownerId: deal.ownerId, ownerNameSnapshot: deal.ownerNameSnapshot,
+      isStuck: daysSinceStageChange >= 14,
+      stuckDays: daysSinceStageChange,
+      archivedAt: deal.archivedAt,
+      pendingDeletionAt: deal.pendingDeletionAt,
       stageHistory: deal.stageHistory, expectedCloseDate: deal.expectedCloseDate
     });
   } catch (err) {
@@ -945,12 +1004,165 @@ app.patch('/api/deals/:id/stage', authMiddleware, async (req, res) => {
 
     await logSystemActivity(deal._id, 'stage_change', `Deal moved from ${oldStage} to ${stage}`, req.user.id);
 
-    res.json({ id: deal._id, stage: deal.stage });
+        res.json({ id: deal._id, stage: deal.stage, temperature: deal.temperature });
   } catch (err) {
     return sendError(res, err);
   }
 });
 
+const daysSince = (date) => Math.floor((Date.now() - new Date(date).getTime()) / (1000 * 60 * 60 * 24));
+   // PATCH /api/deals/bulk-reassign - reassign multiple deals in one action, one activity entry per deal
+app.patch('/api/deals/bulk-reassign', authMiddleware, requireRole(['manager', 'leadership', 'admin']), async (req, res) => {
+  try {
+    const { dealIds, ownerId } = req.body;
+    if (!Array.isArray(dealIds) || dealIds.length === 0) {
+      return res.status(400).json({ error: 'dealIds must be a non-empty array' });
+    }
+    if (!ownerId) return res.status(400).json({ error: 'ownerId is required' });
+
+    const newOwner = await User.findOne({ _id: ownerId, deletedAt: null });
+    if (!newOwner) return res.status(400).json({ error: 'New owner not found' });
+    if (!newOwner.isActive) return res.status(400).json({ error: 'New owner is not active' });
+    if (newOwner.role !== 'rep') return res.status(400).json({ error: 'Deals can only be reassigned to a rep' });
+
+    const results = [];
+    for (const dealId of dealIds) {
+      const deal = await Deal.findOne({ _id: dealId, deletedAt: null });
+      if (!deal) {
+        results.push({ dealId, success: false, error: 'Deal not found' });
+        continue;
+      }
+      if (String(deal.ownerId) === String(newOwner._id)) {
+        results.push({ dealId, success: false, error: 'Already owned by this rep' });
+        continue;
+      }
+
+      const oldOwnerName = deal.ownerNameSnapshot;
+      deal.ownerId = newOwner._id;
+      deal.ownerNameSnapshot = newOwner.name;
+      deal.updatedAt = new Date();
+      await deal.save();
+
+      await logSystemActivity(deal._id, 'reassignment', `Deal reassigned from ${oldOwnerName} to ${newOwner.name}`, req.user.id);
+      results.push({ dealId, success: true, ownerId: deal.ownerId, ownerNameSnapshot: deal.ownerNameSnapshot });
+    }
+
+    res.json({ results });
+  } catch (err) {
+    return sendError(res, err);
+  }
+});
+
+// ========== GDPR DATA RETENTION (US-16) ==========
+
+// Shared logic — reused by the manual endpoint (AC6) and the automatic daily interval below
+async function runArchiveCheck() {
+  let archivedCount = 0;
+  let markedForDeletionCount = 0;
+
+  // AC1 — archive: lost stage, or 90+ days with no activity
+  const candidates = await Deal.find({ deletedAt: null, archivedAt: null });
+  for (const deal of candidates) {
+    const inactiveTooLong = daysSince(deal.lastActivityAt) >= 90;
+    if (deal.stage === 'lost' || inactiveTooLong) {
+      deal.archivedAt = new Date();
+      await deal.save();
+      archivedCount++;
+    }
+  }
+
+  // AC3 — mark for permanent deletion: archived for 30+ further days
+  const archived = await Deal.find({ deletedAt: null, archivedAt: { $ne: null }, pendingDeletionAt: null });
+  for (const deal of archived) {
+    if (daysSince(deal.archivedAt) >= 30) {
+      deal.pendingDeletionAt = new Date();
+      await deal.save();
+      markedForDeletionCount++;
+    }
+  }
+
+  return { archivedCount, markedForDeletionCount };
+}
+
+// POST /api/admin/deals/run-archive-check - manually triggered for the demo (AC6); admin only
+app.post('/api/admin/deals/run-archive-check', authMiddleware, requireRole(['admin']), async (req, res) => {
+  try {
+    const result = await runArchiveCheck();
+    res.json(result);
+  } catch (err) {
+    return sendError(res, err);
+  }
+});
+
+// PATCH /api/deals/:id/restore - admin only, blocked once marked for permanent deletion
+app.patch('/api/deals/:id/restore', authMiddleware, requireRole(['admin']), async (req, res) => {
+  try {
+    const deal = await Deal.findOne({ _id: req.params.id, deletedAt: null });
+    if (!deal) return res.status(404).json({ error: 'Deal not found' });
+    if (!deal.archivedAt) return res.status(400).json({ error: 'Deal is not archived' });
+    if (deal.pendingDeletionAt) {
+      return res.status(400).json({ error: 'Deal is past the 120-day restore window and marked for permanent deletion' });
+    }
+
+    deal.archivedAt = null;
+    deal.updatedAt = new Date();
+    await deal.save();
+
+    res.json({ id: deal._id, archivedAt: deal.archivedAt });
+  } catch (err) {
+    return sendError(res, err);
+  }
+});
+
+// GET /api/deals/archive-warnings - deals 7 days from the 90-day archive mark (83-89 days inactive)
+app.get('/api/deals/archive-warnings', authMiddleware, async (req, res) => {
+  try {
+    const query = { deletedAt: null, archivedAt: null };
+    if (!canViewAllDeals(req.user.role)) {
+      query.ownerId = req.user.id;
+    }
+
+    const candidates = await Deal.find(query);
+    const warnings = candidates
+      .filter(d => {
+        const inactiveDays = daysSince(d.lastActivityAt);
+        return inactiveDays >= 83 && inactiveDays < 90;
+      })
+      .map(d => ({
+        id: d._id, title: d.title, companyNameSnapshot: d.companyNameSnapshot,
+        daysUntilArchive: 90 - daysSince(d.lastActivityAt)
+      }));
+
+    res.json({ data: warnings });
+  } catch (err) {
+    return sendError(res, err);
+  }
+});
+// ========== CAMPAIGN ROI DASHBOARD (US-13) ==========
+
+// GET /api/dashboard/campaign-roi - per-source lead totals, conversions, and rate, optionally date-filtered
+app.get('/api/dashboard/campaign-roi', authMiddleware, requireRole(['marketing', 'leadership', 'admin']), async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    const dateFilter = { deletedAt: null };
+    if (startDate || endDate) {
+      dateFilter.createdAt = {};
+      if (startDate) dateFilter.createdAt.$gte = new Date(startDate);
+      if (endDate) dateFilter.createdAt.$lte = new Date(endDate);
+    }
+
+    const data = await Promise.all(LEAD_SOURCES.map(async (source) => {
+      const totalLeads = await Lead.countDocuments({ ...dateFilter, source });
+      const convertedLeads = await Lead.countDocuments({ ...dateFilter, source, status: 'converted' });
+      const conversionRate = totalLeads > 0 ? Math.round((convertedLeads / totalLeads) * 1000) / 10 : 0;
+      return { source, totalLeads, convertedLeads, conversionRate };
+    }));
+
+    res.json({ data, startDate: startDate || null, endDate: endDate || null });
+  } catch (err) {
+    return sendError(res, err);
+  }
+});
 
 // PATCH /api/deals/:id/reassign - manager/leadership/admin only
 app.patch('/api/deals/:id/reassign', authMiddleware, requireRole(['manager', 'leadership', 'admin']), async (req, res) => {
@@ -963,10 +1175,15 @@ app.patch('/api/deals/:id/reassign', authMiddleware, requireRole(['manager', 'le
     const deal = await Deal.findOne({ _id: req.params.id, deletedAt: null });
     if (!deal) return res.status(404).json({ error: 'Deal not found' });
 
-    const newOwner = await User.findOne({ _id: ownerId, deletedAt: null });
+      const newOwner = await User.findOne({ _id: ownerId, deletedAt: null });
     if (!newOwner) return res.status(400).json({ error: 'New owner not found' });
     if (!newOwner.isActive) return res.status(400).json({ error: 'New owner is not active' });
+    if (newOwner.role !== 'rep') return res.status(400).json({ error: 'Deals can only be reassigned to a rep' });
+    if (String(deal.ownerId) === String(newOwner._id)) {
+      return res.status(400).json({ error: 'This rep already owns the deal' });
+    }
 
+ 
     const oldOwnerName = deal.ownerNameSnapshot;
 
     deal.ownerId = newOwner._id;
@@ -994,6 +1211,49 @@ app.patch('/api/deals/:id/reassign', authMiddleware, requireRole(['manager', 'le
   }
 });
 
+// GET /api/dashboard/summary - pipeline value, win rate, and stage funnel (US-14)
+app.get('/api/dashboard/summary', authMiddleware, requireRole(['leadership', 'admin']), async (req, res) => {
+  try {
+    const allStages = ['new', 'contacted', 'proposal', 'negotiation', 'won', 'lost'];
+    const openStages = ['new', 'contacted', 'proposal', 'negotiation'];
+
+    const deals = await Deal.find({ deletedAt: null, archivedAt: null });
+
+    const pipelineValue = deals
+      .filter(d => openStages.includes(d.stage))
+      .reduce((sum, d) => sum + (d.value || 0), 0);
+
+    const wonCount = deals.filter(d => d.stage === 'won').length;
+    const lostCount = deals.filter(d => d.stage === 'lost').length;
+    const closedTotal = wonCount + lostCount;
+    const winRate = closedTotal > 0 ? Math.round((wonCount / closedTotal) * 1000) / 10 : 0;
+
+    const funnel = allStages.map(stage => ({
+      stage,
+      count: deals.filter(d => d.stage === stage).length
+    }));
+
+    res.json({
+      pipelineValue,
+      wonCount,
+      lostCount,
+      winRate,
+      funnel
+    });
+  } catch (err) {
+    return sendError(res, err);
+  }
+});
+
+// Escapes a value for safe inclusion in a CSV cell (wraps in quotes if it contains a comma, quote, or newline)
+const csvEscape = (value) => {
+  if (value === null || value === undefined) return '';
+  const str = String(value);
+  if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+};
 // Calculates hot/warm/cold based on how recently something happened
 const calculateTemperature = (lastActivityAt) => {
   const daysSince = (Date.now() - new Date(lastActivityAt).getTime()) / (1000 * 60 * 60 * 24);
@@ -1002,7 +1262,13 @@ const calculateTemperature = (lastActivityAt) => {
   return 'cold';
 };
 
-
+// Calculates days since the deal's last STAGE change (not last activity — that's temperature's job)
+const getDaysSinceStageChange = (deal) => {
+  const lastChange = deal.stageHistory && deal.stageHistory.length > 0
+    ? deal.stageHistory[deal.stageHistory.length - 1].changedAt
+    : deal.createdAt;
+  return Math.floor((Date.now() - new Date(lastChange).getTime()) / (1000 * 60 * 60 * 24));
+};
 
 
 // PUT /api/deals/:id - edit title/value only (stage changes use the dedicated route)
@@ -1022,7 +1288,7 @@ app.put('/api/deals/:id', authMiddleware, async (req, res) => {
     deal.updatedAt = new Date();
     await deal.save();
 
-    res.json({ id: deal._id, title: deal.title, value: deal.value });
+    res.json({ id: deal._id, title: deal.title, value: deal.value, temperature: deal.temperature });
   } catch (err) {
     return sendError(res, err);
   }
@@ -1054,7 +1320,6 @@ app.delete('/api/deals/:id/permanent', authMiddleware, requireRole(['admin']), a
     if (!deal) return res.status(404).json({ error: 'Deal not found' });
 
     await Activity.deleteMany({ dealId: deal._id });
-    await Reminder.deleteMany({ dealId: deal._id });
 
     res.status(204).send();
   } catch (err) {
@@ -1062,9 +1327,72 @@ app.delete('/api/deals/:id/permanent', authMiddleware, requireRole(['admin']), a
   }
 });
 
+// ========== AUTOMATED FOLLOW-UP REMINDERS (US-09) ==========
 
+// GET /api/deals/overdue - deals with no activity in 7+ days (badge + list)
+app.get('/api/deals/overdue', authMiddleware, async (req, res) => {
+  try {
+    const query = { deletedAt: null, stage: { $nin: ['won', 'lost'] } };
+    if (!canViewAllDeals(req.user.role)) {
+      query.ownerId = req.user.id;
+    }
 
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    query.lastActivityAt = { $lte: sevenDaysAgo };
 
+    const deals = await Deal.find(query).sort({ lastActivityAt: 1 });
+
+    res.json({
+      count: deals.length,
+      data: deals.map(d => ({
+        id: d._id,
+        title: d.title,
+        companyNameSnapshot: d.companyNameSnapshot,
+        daysInactive: Math.floor((Date.now() - new Date(d.lastActivityAt).getTime()) / (1000 * 60 * 60 * 24))
+      }))
+    });
+  } catch (err) {
+    return sendError(res, err);
+  }
+});
+
+// GET /api/export/deals.csv - full matching pipeline as a downloadable CSV (US-15)
+app.get('/api/export/deals.csv', authMiddleware, async (req, res) => {
+  try {
+        const { companyId, stage, ownerId, showArchived } = req.query;
+    const query = { deletedAt: null };
+
+    if (showArchived !== 'true') query.archivedAt = null;
+    if (companyId) query.companyId = companyId;
+    if (canViewAllDeals(req.user.role)) {
+      if (ownerId) query.ownerId = ownerId;
+    } else {
+      query.ownerId = req.user.id;
+    }
+    if (stage) query.stage = stage;
+
+    const deals = await Deal.find(query); // every matching record, no pagination — AC1
+
+    const headers = ['Title', 'Value', 'Stage', 'Temperature', 'Company', 'Contact', 'Owner', 'Stuck Days'];
+    const rows = deals.map(d => {
+      const stuckDays = getDaysSinceStageChange(d);
+      return [
+        d.title, d.value, d.stage, d.temperature,
+        d.companyNameSnapshot, d.contactNameSnapshot, d.ownerNameSnapshot,
+        stuckDays
+      ].map(csvEscape).join(',');
+    });
+
+    const csv = [headers.join(','), ...rows].join('\n');
+    const dateStr = new Date().toISOString().split('T')[0];
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="Pipeline_Report_${dateStr}.csv"`);
+    res.send(csv);
+  } catch (err) {
+    return sendError(res, err);
+  }
+});
 // ========== ACTIVITY LOGGING (Story 7) ==========
 
 // POST /api/activities - log an activity, updates parent deal's lastActivityAt
@@ -1134,83 +1462,19 @@ app.get('/api/activities', authMiddleware, async (req, res) => {
 });
 
 
-// ========== FOLLOW-UP REMINDERS (Story 8) ==========
 
-// POST /api/reminders - create
-app.post('/api/reminders', authMiddleware, async (req, res) => {
-  try {
-    const { title, dueDate, dealId, contactId } = req.body;
 
-    if (!dealId && !contactId) {
-      return res.status(400).json({ error: 'Must provide dealId or contactId' });
-    }
 
-    const reminder = new Reminder({
-      title, dueDate,
-      dealId: dealId || null,
-      contactId: contactId || null,
-      ownerId: req.user.id
-    });
-    await reminder.save();
 
-    res.json({ id: reminder._id, title: reminder.title, dueDate: reminder.dueDate, isDone: reminder.isDone });
-  } catch (err) {
-    return sendError(res, err);
-  }
-});
-
-// GET /api/reminders - list, scoped by role (same pattern as Deals), optional overdue filter
-app.get('/api/reminders', authMiddleware, async (req, res) => {
-  try {
-    const { overdue, ownerId } = req.query;
-    const query = {};
-
-    if (canViewAllDeals(req.user.role)) {
-      // manager/leadership/admin can optionally filter to a specific rep
-      if (ownerId) query.ownerId = ownerId;
-    } else {
-      // rep: always scoped to themselves
-      query.ownerId = req.user.id;
-    }
-
-    if (overdue === 'true') {
-      query.isDone = false;
-      query.dueDate = { $lt: new Date() };
-    }
-
-    const reminders = await Reminder.find(query).sort({ dueDate: 1 });
-
-    res.json({
-      data: reminders.map(r => ({
-        id: r._id, title: r.title, dueDate: r.dueDate, isDone: r.isDone,
-        dealId: r.dealId, contactId: r.contactId
-      }))
-    });
-  } catch (err) {
-    return sendError(res, err);
-  }
-});
-
-// PATCH /api/reminders/:id/done - mark complete
-app.patch('/api/reminders/:id/done', authMiddleware, async (req, res) => {
-  try {
-    const reminder = await Reminder.findById(req.params.id);
-    if (!reminder) return res.status(404).json({ error: 'Reminder not found' });
-
-    // Same ownership rule as viewing — a rep can't complete someone else's reminder
-    if (!canViewAllDeals(req.user.role) && String(reminder.ownerId) !== req.user.id) {
-      return res.status(403).json({ error: 'Not authorized for this action' });
-    }
-
-    reminder.isDone = true;
-    reminder.completedAt = new Date();
-    await reminder.save();
-
-    res.json({ id: reminder._id, isDone: reminder.isDone, completedAt: reminder.completedAt });
-  } catch (err) {
-    return sendError(res, err);
-  }
-});
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+
+// Automatic daily archive check (US-16 AC1). Runs once on startup, then every 24 hours.
+// Only fires while this process stays running continuously — see note in chat.
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+setInterval(() => {
+  runArchiveCheck()
+    .then(result => console.log('🗄️ Automatic archive check:', result))
+    .catch(err => console.error('❌ Automatic archive check failed:', err));
+}, ONE_DAY_MS);
