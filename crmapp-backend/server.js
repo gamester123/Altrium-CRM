@@ -684,7 +684,7 @@ app.get('/api/companies/:id/contacts', authMiddleware, async (req, res) => {
 
 // ========== LEAD MANAGEMENT (Story 5) ==========
 
-/ GET /api/leads - list, filterable by status, with pagination
+// GET /api/leads - list, filterable by status, with pagination
 app.get('/api/leads', authMiddleware, async (req, res) => {
   try {
     const {
