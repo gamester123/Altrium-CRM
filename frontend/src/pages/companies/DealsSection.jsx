@@ -36,7 +36,7 @@ function formatCurrency(n) {
 
 export default function DealsSection({ companyId, companyName }) {
   const { user } = useAuth()
-  const canSeeCreators = [ROLES.MANAGER, ROLES.LEADERSHIP, ROLES.ADMIN].includes(user?.role)
+  const canSeeCreators = [ROLES.MANAGER, ROLES.ADMIN].includes(user?.role)
   const [deals, setDeals] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)

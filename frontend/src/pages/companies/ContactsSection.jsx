@@ -17,7 +17,7 @@ import { ROLES } from '../../auth/roles'
 
 export default function ContactsSection({ companyId }) {
   const { user } = useAuth()
-  const canSeeCreators = [ROLES.MANAGER, ROLES.LEADERSHIP, ROLES.ADMIN].includes(user?.role)
+  const canSeeCreators = [ROLES.MANAGER, ROLES.ADMIN].includes(user?.role)
   const [contacts, setContacts] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)

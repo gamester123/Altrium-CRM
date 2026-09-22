@@ -94,10 +94,7 @@ export default function UserManagementPage() {
       header: 'Role',
       render: (u) => {
         const isMe = u.id === me?.id
-        const isProtected =
-  isMe ||
-  u.role === ROLES.ADMIN ||
-  u.role === ROLES.LEADERSHIP
+        const isProtected = isMe || u.role === ROLES.ADMIN
         return (
           <div className="flex items-center gap-2">
             <select
@@ -118,10 +115,7 @@ export default function UserManagementPage() {
       header: 'Account',
       render: (u) => {
         const isMe = u.id === me?.id
-        const isProtected =
-  isMe ||
-  u.role === ROLES.ADMIN ||
-  u.role === ROLES.LEADERSHIP
+        const isProtected = isMe || u.role === ROLES.ADMIN
         if (isProtected) return <span className="text-xs text-ink/30">—</span>
         if (confirmingId === u.id) {
           return (

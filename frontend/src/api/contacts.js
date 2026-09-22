@@ -5,14 +5,6 @@ const USE_MOCKS = import.meta.env.VITE_USE_MOCKS === 'true'
 
 let mockData = JSON.parse(JSON.stringify(mockContacts))
 
-export const listContacts = ({ ownerId = '', limit = 0 } = {}) => {
-  if (!USE_MOCKS) {
-    return client.get('/contacts', { params: { ownerId, limit } }).then((r) => r.data)
-  }
-  const filtered = ownerId ? mockData.data.filter((c) => String(c.ownerId) === String(ownerId)) : mockData.data
-  return Promise.resolve({ data: filtered, total: filtered.length })
-}
-
 export const listContactsForCompany = (companyId, { search = '' } = {}) => {
   if (!USE_MOCKS) {
     return client.get('/contacts', { params: { companyId, search } }).then((r) => r.data)

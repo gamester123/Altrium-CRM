@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { listCompanies, createCompany, updateCompany, deleteCompany } from '../../api/companies'
-import { listContacts } from '../../api/contacts'
-import { listDeals } from '../../api/deals'
 import { useAuth } from '../../auth/AuthContext'
 import { ROLES } from '../../auth/roles'
 import { friendlyError } from '../../lib/errors'
@@ -17,68 +15,38 @@ const LIMIT = 20
 export default function CompaniesListPage() {
   const { user } = useAuth()
   const isAdmin = user?.role === ROLES.ADMIN
-  const canSeeCreators = [ROLES.MANAGER, ROLES.LEADERSHIP, ROLES.ADMIN].includes(user?.role)
+  const canSeeCreators = [ROLES.MANAGER, ROLES.ADMIN].includes(user?.role)
 
   const [companies, setCompanies] = useState([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [search, setSearch] = useState('')
-  const [companyScope, setCompanyScope] = useState('all')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState(null) // null = add, object = edit
 
-  const load = useCallback(async (targetPage, targetSearch, targetScope) => {
+  const load = useCallback((targetPage, targetSearch) => {
     setLoading(true)
     setError(null)
-    try {
-      if (targetScope !== 'related' || user?.role !== ROLES.REP) {
-        const res = await listCompanies({ page: targetPage, limit: LIMIT, search: targetSearch })
+    listCompanies({ page: targetPage, limit: LIMIT, search: targetSearch })
+      .then((res) => {
         setCompanies(res.data)
         setTotal(typeof res.total === 'number' ? res.total : res.data.length)
-        return
-      }
-
-      // The backend intentionally returns all companies to reps. Build the
-      // related-company view from the rep's own contacts and deals instead
-      // of relying on an unsupported scope=related backend parameter.
-      const [companyRes, contactRes, dealRes] = await Promise.all([
-        listCompanies({ limit: 0, search: targetSearch }),
-        listContacts({ limit: 0 }),
-        listDeals({ limit: 0 }),
-      ])
-      const relatedIds = new Set()
-      ;(companyRes.data || []).forEach((c) => {
-        if (String(c.createdBy || '') === String(user.id || '')) relatedIds.add(String(c.id))
       })
-      ;(contactRes.data || []).forEach((c) => {
-        if (c.companyId) relatedIds.add(String(c.companyId))
-      })
-      ;(dealRes.data || []).forEach((d) => {
-        if (d.companyId) relatedIds.add(String(d.companyId))
-      })
-
-      const related = (companyRes.data || []).filter((c) => relatedIds.has(String(c.id)))
-      const start = (targetPage - 1) * LIMIT
-      setCompanies(related.slice(start, start + LIMIT))
-      setTotal(related.length)
-    } catch (err) {
-      setError(friendlyError(err))
-    } finally {
-      setLoading(false)
-    }
-  }, [user])
+      .catch((err) => setError(friendlyError(err)))
+      .finally(() => setLoading(false))
+  }, [])
 
   useEffect(() => {
-    load(page, search, companyScope)
-  }, [load, page, search, companyScope])
+    load(page, search)
+  }, [load, page, search])
 
   const onSearchSubmit = (e) => {
     e.preventDefault()
     setPage(1)
-    load(1, search, companyScope)
+    load(1, search)
   }
 
   const openAdd = () => { setEditing(null); setModalOpen(true) }
@@ -186,14 +154,8 @@ export default function CompaniesListPage() {
         <div className="company-summary-note"><span>Directory</span><p>Keep customer organizations easy to scan, open and manage.</p></div>
       </div>
       <div className="toolbar-card company-toolbar">
-        <div className="search-wrap"><span>⌕</span><input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1) }} placeholder="Search by company name…" /></div>
-        {user?.role === ROLES.REP && (
-          <div className="filter-group">
-            <button type="button" className={companyScope === 'all' ? 'active' : ''} onClick={() => { setCompanyScope('all'); setPage(1) }}>All companies</button>
-            <button type="button" className={companyScope === 'related' ? 'active' : ''} onClick={() => { setCompanyScope('related'); setPage(1) }}>My / Related</button>
-          </div>
-        )}
-        <div className="toolbar-meta"><span>{search ? `Results for “${search}”` : companyScope === 'related' ? 'My / related companies' : 'All companies'}</span></div>
+        <div className="search-wrap"><span>⌕</span><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by company name…" /></div>
+        <div className="toolbar-meta"><span>{search ? `Results for “${search}”` : 'All companies'}</span></div>
       </div>
       {error && <p role="alert" className="alert-error">{error}</p>}
       <DataTable columns={columns} rows={companies} rowKey={(c) => c.id} loading={loading} empty={search ? `No companies match "${search}".` : 'No companies yet — add your first one.'} page={page} total={total} limit={LIMIT} onPageChange={setPage} />
