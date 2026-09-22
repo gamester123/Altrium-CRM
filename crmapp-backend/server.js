@@ -684,34 +684,64 @@ app.get('/api/companies/:id/contacts', authMiddleware, async (req, res) => {
 
 // ========== LEAD MANAGEMENT (Story 5) ==========
 
-// GET /api/leads - list, filterable by status, with pagination
+/ GET /api/leads - list, filterable by status, with pagination
 app.get('/api/leads', authMiddleware, async (req, res) => {
   try {
-    const { status, search = '', ownerId, page = 1, limit = 20 } = req.query;
+    const {
+      status,
+      search = '',
+      ownerId,
+      page = 1,
+      limit = 20
+    } = req.query;
+
     const query = { deletedAt: null };
-    if (status) query.status = status;
+
+    if (status) {
+      query.status = status;
+    }
+
     if (search) {
       query.$or = [
         { name: { $regex: search, $options: 'i' } },
         { email: { $regex: search, $options: 'i' } }
       ];
     }
-    if (canViewAllDeals(req.user.role)) {
-      if (ownerId) query.ownerId = ownerId;
+
+    // Managers, Leadership, Admin, and Marketing
+    // can view all leads.
+    if (
+      canViewAllDeals(req.user.role) ||
+      req.user.role === 'marketing'
+    ) {
+      if (ownerId) {
+        query.ownerId = ownerId;
+      }
     } else {
+      // Sales Representatives can only see
+      // their own leads.
       query.ownerId = req.user.id;
     }
+
     const total = await Lead.countDocuments(query);
+
     const leads = await Lead.find(query)
       .skip((Number(page) - 1) * Number(limit))
       .limit(Number(limit));
 
-          res.json({
+    res.json({
       data: leads.map(l => ({
-        id: l._id, name: l.name, email: l.email, phone: l.phone,
-        status: l.status, source: l.source, temperature: l.temperature,
-        ownerId: l.ownerId, ownerNameSnapshot: l.ownerNameSnapshot,
-        convertedToContactId: l.convertedToContactId, convertedToDealId: l.convertedToDealId
+        id: l._id,
+        name: l.name,
+        email: l.email,
+        phone: l.phone,
+        status: l.status,
+        source: l.source,
+        temperature: l.temperature,
+        ownerId: l.ownerId,
+        ownerNameSnapshot: l.ownerNameSnapshot,
+        convertedToContactId: l.convertedToContactId,
+        convertedToDealId: l.convertedToDealId
       })),
       total
     });
