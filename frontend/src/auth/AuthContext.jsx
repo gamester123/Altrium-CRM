@@ -50,7 +50,7 @@ export function AuthProvider({ children }) {
   const loginAdmin = useCallback(async (email, password) => {
     const { token } = await authApi.adminLogin(email, password)
     const me = await finishLogin(token, ADMIN_TOKEN_KEY)
-    const privilegedRoles = ['manager', 'leadership', 'admin']
+    const privilegedRoles = ['leadership', 'admin']
     if (!privilegedRoles.includes(me.role)) {
       clearStoredTokens()
       setUser(null)

@@ -9,13 +9,16 @@ export const listCompanies = (params = {}) => {
   if (!USE_MOCKS) {
     return client.get('/companies', { params }).then((r) => r.data)
   }
-  const { search = '', page = 1, limit = 20 } = params
-  const filtered = mockData.data.filter((c) =>
-    c.name.toLowerCase().includes(search.toLowerCase())
-  )
+  const { search = '', page = 1, limit = 20, scope = '', userId = '' } = params
+  const filtered = mockData.data.filter((c) => {
+    if (!c.name.toLowerCase().includes(search.toLowerCase())) return false
+    if (scope === 'related' && userId && String(c.createdBy || '') !== String(userId)) return false
+    return true
+  })
   const start = (page - 1) * limit
+  const rows = Number(limit) > 0 ? filtered.slice(start, start + limit) : filtered
   return Promise.resolve({
-    data: filtered.slice(start, start + limit),
+    data: rows,
     total: filtered.length,
   })
 }

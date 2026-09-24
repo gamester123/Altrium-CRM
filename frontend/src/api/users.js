@@ -30,3 +30,5 @@ export const createUser = (payload) =>
   USE_MOCKS
     ? Promise.resolve({ id: `mock-user-${Date.now()}`, ...payload })
     : client.post('/users', payload).then((r) => r.data)
+
+export const listReps = () => client.get('/users/reps').then(r => r.data)

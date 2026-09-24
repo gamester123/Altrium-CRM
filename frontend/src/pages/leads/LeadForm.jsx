@@ -4,7 +4,7 @@ import Button from '../../components/ui/Button'
 import { friendlyError } from '../../lib/errors'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-const SOURCES = ['Referral', 'Website', 'Cold call', 'Event', 'LinkedIn', 'Other']
+const SOURCES = ['Google Ads', 'LinkedIn', 'Email Campaign', 'Referral', 'Other']
 
 export default function LeadForm({ onSave, onCancel }) {
   const [name, setName] = useState('')
@@ -18,7 +18,8 @@ export default function LeadForm({ onSave, onCancel }) {
   const validate = () => {
     const next = {}
     if (!name.trim()) next.name = 'Name is required.'
-    if (email.trim() && !EMAIL_RE.test(email.trim())) next.email = 'That doesn\u2019t look like a valid email.'
+    if (!email.trim()) next.email = 'Email is required.'
+    else if (!EMAIL_RE.test(email.trim())) next.email = 'That doesn\u2019t look like a valid email.'
     setErrors(next)
     return Object.keys(next).length === 0
   }
@@ -56,7 +57,7 @@ export default function LeadForm({ onSave, onCancel }) {
         autoFocus
       />
       <Input
-        label="Email (optional)"
+        label="Email"
         name="email"
         type="email"
         value={email}
