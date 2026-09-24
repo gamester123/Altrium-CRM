@@ -59,15 +59,66 @@ export default function App() {
             <Route element={<AppShell />}>
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route path="/dashboard" element={<DashboardPage />} />
-              <Route path="/companies" element={<CompaniesListPage />} />
-              <Route path="/pipeline" element={<PipelineBoardPage />} />
-              <Route path="/companies/:id" element={<CompanyDetailPage />} />
-              <Route path="/deals/:id" element={<DealDetailPage />} />
-              <Route path="/contacts/:id" element={<ContactDetailPage />} />    
-              <Route path="/leads" element={<LeadsListPage />} />
-              <Route path="/campaigns" element={<CampaignDashboardPage />} />
-              <Route path="/leadership" element={<LeadershipDashboardPage />} />
-              
+
+              <Route
+                element={
+                  <ProtectedRoute
+                    allow={[
+                      ROLES.REP,
+                      ROLES.MANAGER,
+                      ROLES.LEADERSHIP,
+                      ROLES.ADMIN,
+                    ]}
+                  />
+                }
+              >
+                <Route path="/companies" element={<CompaniesListPage />} />
+                <Route path="/companies/:id" element={<CompanyDetailPage />} />
+                <Route path="/deals/:id" element={<DealDetailPage />} />
+                <Route path="/contacts/:id" element={<ContactDetailPage />} />
+                <Route path="/pipeline" element={<PipelineBoardPage />} />
+              </Route>
+
+              <Route
+                element={
+                  <ProtectedRoute
+                    allow={[
+                      ROLES.REP,
+                      ROLES.MANAGER,
+                      ROLES.MARKETING,
+                      ROLES.LEADERSHIP,
+                      ROLES.ADMIN,
+                    ]}
+                  />
+                }
+              >
+                <Route path="/leads" element={<LeadsListPage />} />
+              </Route>
+
+              <Route
+                element={
+                  <ProtectedRoute
+                    allow={[
+                      ROLES.MARKETING,
+                      ROLES.LEADERSHIP,
+                      ROLES.ADMIN,
+                    ]}
+                  />
+                }
+              >
+                <Route path="/campaigns" element={<CampaignDashboardPage />} />
+              </Route>
+
+              <Route
+                element={
+                  <ProtectedRoute
+                    allow={[ROLES.LEADERSHIP, ROLES.ADMIN]}
+                  />
+                }
+              >
+                <Route path="/leadership" element={<LeadershipDashboardPage />} />
+              </Route>
+
               <Route element={<ProtectedRoute allow={[ROLES.ADMIN]} />}>
                 <Route path="/admin/users" element={<UserManagementPage />} />
               </Route>

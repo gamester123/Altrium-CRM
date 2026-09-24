@@ -3,8 +3,107 @@ import { useEffect,useState } from 'react'
 import { useAuth } from '../../auth/AuthContext'
 import { ROLES } from '../../auth/roles'
 import { getOverdueDeals,getArchiveWarnings } from '../../api/deals'
-const nav=[{to:'/dashboard',label:'Overview',icon:'▦'},{to:'/companies',label:'Companies',icon:'▤'},{to:'/pipeline',label:'Pipeline',icon:'▥'},{to:'/leads',label:'Leads',icon:'♙'}]
+const nav = [
+  {
+    to: '/dashboard',
+    label: 'Overview',
+    icon: '▦',
+  },
+  {
+    to: '/companies',
+    label: 'Companies',
+    icon: '▤',
+    allow: [
+      ROLES.REP,
+      ROLES.MANAGER,
+      ROLES.LEADERSHIP,
+      ROLES.ADMIN,
+    ],
+  },
+  {
+    to: '/pipeline',
+    label: 'Pipeline',
+    icon: '▥',
+    allow: [
+      ROLES.REP,
+      ROLES.MANAGER,
+      ROLES.LEADERSHIP,
+      ROLES.ADMIN,
+    ],
+  },
+  {
+    to: '/leads',
+    label: 'Leads',
+    icon: '♙',
+    allow: [
+      ROLES.REP,
+      ROLES.MANAGER,
+      ROLES.MARKETING,
+      ROLES.LEADERSHIP,
+      ROLES.ADMIN,
+    ],
+  },
+  {
+    to: '/campaigns',
+    label: 'Campaigns',
+    icon: '◌',
+    allow: [
+      ROLES.MARKETING,
+      ROLES.LEADERSHIP,
+      ROLES.ADMIN,
+    ],
+  },
+]
 const link=({isActive})=>`group nav-link relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${isActive?'nav-active bg-white/[.08] text-white':'text-slate-400 hover:bg-white/[.05] hover:text-white'}`
-function NavItems({close}){const {user}=useAuth();return <>{nav.map(n=><NavLink key={n.to} to={n.to} onClick={close} className={link}><span className="w-5 text-center opacity-80">{n.icon}</span>{n.label}</NavLink>)}{[ROLES.MARKETING,ROLES.LEADERSHIP,ROLES.ADMIN].includes(user?.role)&&<NavLink to="/campaigns" onClick={close} className={link}><span className="w-5 text-center">◌</span>Campaigns</NavLink>}{[ROLES.LEADERSHIP,ROLES.ADMIN].includes(user?.role)&&<NavLink to="/leadership" onClick={close} className={link}><span className="w-5 text-center">◆</span>Leadership</NavLink>}{user?.role===ROLES.ADMIN&&<NavLink to="/admin/users" onClick={close} className={link}><span className="w-5 text-center">◈</span>User management</NavLink>}</>}
+function NavItems({ close }) {
+  const { user } = useAuth()
+
+  const visibleNav = nav.filter(
+    (item) => !item.allow || item.allow.includes(user?.role)
+  )
+
+  return (
+    <>
+      {visibleNav.map((n) => (
+        <NavLink
+          key={n.to}
+          to={n.to}
+          onClick={close}
+          className={link}
+        >
+          <span className="w-5 text-center opacity-80">
+            {n.icon}
+          </span>
+          {n.label}
+        </NavLink>
+      ))}
+
+      {[
+        ROLES.LEADERSHIP,
+        ROLES.ADMIN,
+      ].includes(user?.role) && (
+        <NavLink
+          to="/leadership"
+          onClick={close}
+          className={link}
+        >
+          <span className="w-5 text-center">◆</span>
+          Leadership
+        </NavLink>
+      )}
+
+      {user?.role === ROLES.ADMIN && (
+        <NavLink
+          to="/admin/users"
+          onClick={close}
+          className={link}
+        >
+          <span className="w-5 text-center">◈</span>
+          User management
+        </NavLink>
+      )}
+    </>
+  )
+}
 function Brand(){return <div className="flex items-center gap-3 px-2 pb-9"><div className="grid h-10 w-10 place-items-center rounded-[13px] bg-gradient-to-br from-emerald-300 to-cyan-300 text-[15px] font-extrabold text-[#0c1320]">A</div><div><div className="font-display text-[17px] font-semibold tracking-tight text-white">Altrium</div><div className="text-[9px] uppercase tracking-[.22em] text-slate-500">CRM workspace</div></div></div>}
 export default function AppShell(){const {user,logout}=useAuth();const [open,setOpen]=useState(false),[overdue,setOverdue]=useState({count:0,data:[]}),[warnings,setWarnings]=useState([]),[attentionOpen,setAttentionOpen]=useState(false);const loadAttention=()=>{getOverdueDeals().then(setOverdue).catch(()=>{});getArchiveWarnings().then(r=>setWarnings(r.data||[])).catch(()=>{})};useEffect(()=>{loadAttention();const refresh=()=>loadAttention();window.addEventListener('deal-activity-logged',refresh);return()=>window.removeEventListener('deal-activity-logged',refresh)},[user]);return <div className="crm-shell min-h-screen bg-[#f6f8fb] text-slate-900"><aside className="crm-sidebar fixed inset-y-0 left-0 z-40 hidden w-[252px] flex-col border-r border-white/5 bg-[#0c1320] px-4 py-5 lg:flex"><Brand/><nav className="grid gap-1"><NavItems/></nav><div className="mt-auto border-t border-white/5 pt-4"><div className="px-2 pb-3 text-[9px] uppercase tracking-[.16em] text-slate-600">Signed in</div><div className="flex items-center gap-3 px-2"><div className="grid h-9 w-9 place-items-center rounded-xl bg-white/10 text-xs font-bold text-white">{(user?.name||user?.email||'?').slice(0,1).toUpperCase()}</div><div className="min-w-0 flex-1"><div className="truncate text-xs font-semibold text-slate-200">{user?.name||user?.email}</div><div className="text-[9px] uppercase tracking-wider text-slate-500">{user?.role}</div></div><button onClick={logout} className="text-slate-500 hover:text-white" title="Log out">↪</button></div></div></aside>{open&&<button className="crm-mobile-overlay" onClick={()=>setOpen(false)} aria-label="Close navigation"/>}<aside className={`crm-mobile-drawer lg:hidden ${open?'is-open':''}`}><div className="flex items-center justify-between"><Brand/><button className="crm-mobile-close" onClick={()=>setOpen(false)}>×</button></div><nav className="grid gap-1"><NavItems close={()=>setOpen(false)}/></nav><button className="mt-auto rounded-xl bg-white/5 px-3 py-2.5 text-left text-sm text-slate-300" onClick={logout}>Log out</button></aside><div className="lg:pl-[252px]"><header className="sticky top-0 z-30 flex h-[70px] items-center justify-between border-b border-slate-200/80 bg-white/90 px-4 backdrop-blur-xl sm:px-5 lg:px-8"><div className="flex items-center gap-3"><button className="crm-hamburger" onClick={()=>setOpen(true)} aria-label="Open navigation"><span/><span/><span/></button><div className="hidden lg:block"><div className="text-[11px] font-semibold text-slate-500">Sales workspace</div><div className="text-[10px] text-slate-400">Customer operations</div></div></div><div className="flex items-center gap-2"><button onClick={()=>{loadAttention();setAttentionOpen(v=>!v)}} className={`attention-button ${overdue.count||warnings.length?'has-alert':''}`} aria-label="Attention"><span>♢</span>{overdue.count+warnings.length>0&&<b>{overdue.count+warnings.length}</b>}</button><div className="hidden items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1.5 text-[10px] font-semibold text-emerald-700 sm:flex">Workspace online</div><div className="grid h-9 w-9 place-items-center rounded-full bg-slate-900 text-[11px] font-bold text-white lg:hidden">{(user?.name||'?').slice(0,1).toUpperCase()}</div></div></header>{attentionOpen&&<div className="attention-popover"><div className="flex items-center justify-between"><strong>Attention</strong><button onClick={()=>setAttentionOpen(false)}>×</button></div>{overdue.count>0&&<><p className="attention-heading">Follow-ups · {overdue.count}</p>{overdue.data.map(d=><NavLink key={d.id} to={`/deals/${d.id}`} onClick={()=>setAttentionOpen(false)}><strong>{d.title}</strong><span>{d.companyNameSnapshot||'No company'} · {d.daysInactive} days inactive</span></NavLink>)}</>}{warnings.length>0&&<><p className="attention-heading">Archive warnings · {warnings.length}</p>{warnings.map(d=><NavLink key={d.id} to="/pipeline" onClick={()=>setAttentionOpen(false)}><strong>{d.title}</strong><span>{d.companyNameSnapshot||'No company'} · archives in {d.daysUntilArchive} days</span></NavLink>)}</>}{!overdue.count&&!warnings.length&&<div className="attention-empty">Everything is up to date.</div>}</div>}<main className="crm-main px-4 py-6 sm:px-6 lg:px-8 lg:py-8"><Outlet/></main></div></div>}
