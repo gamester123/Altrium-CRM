@@ -362,9 +362,11 @@ export default function LeadsListPage() {
           </p>
         </div>
 
-        <Button onClick={() => setAddOpen(true)}>
-          + Add lead
-        </Button>
+        {user?.role !== ROLES.REP && (
+          <Button onClick={() => setAddOpen(true)}>
+            + Add lead
+          </Button>
+        )}
       </div>
 
       <div className="lead-stats">
