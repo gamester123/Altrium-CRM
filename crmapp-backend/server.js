@@ -687,61 +687,31 @@ app.get('/api/companies/:id/contacts', authMiddleware, async (req, res) => {
 // GET /api/leads - list, filterable by status, with pagination
 app.get('/api/leads', authMiddleware, async (req, res) => {
   try {
-    const {
-      status,
-      search = '',
-      ownerId,
-      page = 1,
-      limit = 20
-    } = req.query;
-
+    const { status, search = '', ownerId, page = 1, limit = 20 } = req.query;
     const query = { deletedAt: null };
-
-    if (status) {
-      query.status = status;
-    }
-
+    if (status) query.status = status;
     if (search) {
       query.$or = [
         { name: { $regex: search, $options: 'i' } },
         { email: { $regex: search, $options: 'i' } }
       ];
     }
-
-    // Managers, Leadership, Admin, and Marketing
-    // can view all leads.
-    if (
-      canViewAllDeals(req.user.role) ||
-      req.user.role === 'marketing'
-    ) {
-      if (ownerId) {
-        query.ownerId = ownerId;
-      }
+    if (canViewAllDeals(req.user.role)) {
+      if (ownerId) query.ownerId = ownerId;
     } else {
-      // Sales Representatives can only see
-      // their own leads.
       query.ownerId = req.user.id;
     }
-
     const total = await Lead.countDocuments(query);
-
     const leads = await Lead.find(query)
       .skip((Number(page) - 1) * Number(limit))
       .limit(Number(limit));
 
-    res.json({
+          res.json({
       data: leads.map(l => ({
-        id: l._id,
-        name: l.name,
-        email: l.email,
-        phone: l.phone,
-        status: l.status,
-        source: l.source,
-        temperature: l.temperature,
-        ownerId: l.ownerId,
-        ownerNameSnapshot: l.ownerNameSnapshot,
-        convertedToContactId: l.convertedToContactId,
-        convertedToDealId: l.convertedToDealId
+        id: l._id, name: l.name, email: l.email, phone: l.phone,
+        status: l.status, source: l.source, temperature: l.temperature,
+        ownerId: l.ownerId, ownerNameSnapshot: l.ownerNameSnapshot,
+        convertedToContactId: l.convertedToContactId, convertedToDealId: l.convertedToDealId
       })),
       total
     });
@@ -753,19 +723,39 @@ app.get('/api/leads', authMiddleware, async (req, res) => {
 // POST /api/leads - create
 app.post('/api/leads', authMiddleware, async (req, res) => {
   try {
+    // Sales Representatives can view/manage existing leads,
+    // but they cannot create new leads.
+    if (req.user.role === 'rep') {
+      return res.status(403).json({
+        error: 'Sales representatives cannot create leads',
+      });
+    }
+
     const { name, email, phone, source } = req.body;
+
     const owner = await User.findById(req.user.id);
+
     const lead = new Lead({
-      name, email, phone, source,
+      name,
+      email,
+      phone,
+      source,
       ownerId: req.user.id,
       ownerNameSnapshot: owner ? owner.name : '',
-      temperature: 'hot'
+      temperature: 'hot',
     });
+
     await lead.save();
+
     res.json({
-      id: lead._id, name: lead.name, email: lead.email, phone: lead.phone,
-      status: lead.status, source: lead.source,
-      ownerId: lead.ownerId, ownerNameSnapshot: lead.ownerNameSnapshot
+      id: lead._id,
+      name: lead.name,
+      email: lead.email,
+      phone: lead.phone,
+      status: lead.status,
+      source: lead.source,
+      ownerId: lead.ownerId,
+      ownerNameSnapshot: lead.ownerNameSnapshot,
     });
   } catch (err) {
     return sendError(res, err);
@@ -935,6 +925,34 @@ app.get('/api/deals', authMiddleware, async (req, res) => {
     const pagedDeals = all === 'true' ? deals : deals.slice((Number(page) - 1) * Number(limit), Number(page) * Number(limit));
 
     res.json({ data: pagedDeals, total });
+  } catch (err) {
+    return sendError(res, err);
+  }
+});
+
+
+// GET /api/deals/overdue - deals with no activity in 7+ days (badge + list)
+app.get('/api/deals/overdue', authMiddleware, async (req, res) => {
+  try {
+    const query = { deletedAt: null, stage: { $nin: ['won', 'lost'] } };
+    if (!canViewAllDeals(req.user.role)) {
+      query.ownerId = req.user.id;
+    }
+
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    query.lastActivityAt = { $lte: sevenDaysAgo };
+
+    const deals = await Deal.find(query).sort({ lastActivityAt: 1 });
+
+    res.json({
+      count: deals.length,
+      data: deals.map(d => ({
+        id: d._id,
+        title: d.title,
+        companyNameSnapshot: d.companyNameSnapshot,
+        daysInactive: Math.floor((Date.now() - new Date(d.lastActivityAt).getTime()) / (1000 * 60 * 60 * 24))
+      }))
+    });
   } catch (err) {
     return sendError(res, err);
   }
@@ -1357,34 +1375,7 @@ app.delete('/api/deals/:id/permanent', authMiddleware, requireRole(['admin']), a
   }
 });
 
-// ========== AUTOMATED FOLLOW-UP REMINDERS (US-09) ==========
 
-// GET /api/deals/overdue - deals with no activity in 7+ days (badge + list)
-app.get('/api/deals/overdue', authMiddleware, async (req, res) => {
-  try {
-    const query = { deletedAt: null, stage: { $nin: ['won', 'lost'] } };
-    if (!canViewAllDeals(req.user.role)) {
-      query.ownerId = req.user.id;
-    }
-
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    query.lastActivityAt = { $lte: sevenDaysAgo };
-
-    const deals = await Deal.find(query).sort({ lastActivityAt: 1 });
-
-    res.json({
-      count: deals.length,
-      data: deals.map(d => ({
-        id: d._id,
-        title: d.title,
-        companyNameSnapshot: d.companyNameSnapshot,
-        daysInactive: Math.floor((Date.now() - new Date(d.lastActivityAt).getTime()) / (1000 * 60 * 60 * 24))
-      }))
-    });
-  } catch (err) {
-    return sendError(res, err);
-  }
-});
 
 // GET /api/export/deals.csv - full matching pipeline as a downloadable CSV (US-15)
 app.get('/api/export/deals.csv', authMiddleware, async (req, res) => {
