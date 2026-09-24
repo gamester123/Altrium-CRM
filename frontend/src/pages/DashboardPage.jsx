@@ -80,7 +80,9 @@ export default function DashboardPage() {
                 : leads.length,
             deals: 0,
             value: 0,
-            newLeads: leads.filter((lead) => lead.status === 'new').length,
+            newLeads: leads.filter(
+              (lead) => lead.status === 'new'
+            ).length,
             qualifiedLeads: leads.filter(
               (lead) => lead.status === 'qualified'
             ).length,
